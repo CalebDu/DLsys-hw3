@@ -4,7 +4,7 @@ from functools import reduce
 import numpy as np
 from . import ndarray_backend_numpy
 from . import ndarray_backend_cpu
-
+import copy
 # math.prod not in Python 3.7
 def prod(x):
     return reduce(operator.mul, x, 1)
@@ -295,7 +295,15 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_stride = list(self.strides)
+        for i, pair in enumerate(zip(self.shape, new_shape)):
+            if pair[0]!=pair[1] and pair[0]!=1:
+                raise ValueError
+            elif pair[0]!=pair[1] and pair[0]==1: 
+                new_stride[i] = 0
+            
+        ret = self.make(new_shape, tuple(new_stride), self.device, self._handle, self._offset)
+        return ret
         ### END YOUR SOLUTION
 
     ### Get and set elements
