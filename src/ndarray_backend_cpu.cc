@@ -212,14 +212,85 @@ void ScalarAdd(const AlignedArray &a, scalar_t val, AlignedArray *out) {
  */
 
 /// BEGIN YOUR SOLUTION
+template <typename OP>
+void EwiseOP(const AlignedArray &a, const AlignedArray &b, AlignedArray *out,
+             OP op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i], b.ptr[i]);
+    }
+}
+template <typename OP>
+void EwiseOP(const AlignedArray &a, AlignedArray *out, OP op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i]);
+    }
+}
+template <typename OP>
+void ScalarOp(const AlignedArray &a, scalar_t val, AlignedArray *out, OP op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i], val);
+    }
+}
+
+void EwiseMul(const AlignedArray &a, const AlignedArray &b, AlignedArray *out) {
+    EwiseOP(a, b, out, std::multiplies<>());
+}
+
+void ScalarMul(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+    ScalarOp(a, val, out, std::multiplies<>());
+}
+void EwiseDiv(const AlignedArray &a, const AlignedArray &b, AlignedArray *out) {
+    EwiseOP(a, b, out, std::divides<>());
+}
+void ScalarDiv(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+    ScalarOp(a, val, out, std::divides<>());
+}
+
+void ScalarPower(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+    ScalarOp(a, val, out, powf);
+}
+
+void EwiseMaximum(const AlignedArray &a, const AlignedArray &b,
+                  AlignedArray *out) {
+    EwiseOP(a, b, out, [](scalar_t a, scalar_t b) { return std::max(a, b); });
+}
+
+void ScalarMaximum(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+    ScalarOp(a, val, out,
+             [](scalar_t a, scalar_t b) { return std::max(a, b); });
+}
+
+void EwiseEq(const AlignedArray &a, const AlignedArray &b, AlignedArray *out) {
+    EwiseOP(a, b, out, std::equal_to<>());
+}
+void ScalarEq(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+    ScalarOp(a, val, out, std::equal_to<>());
+}
+
+void EwiseGe(const AlignedArray &a, const AlignedArray &b, AlignedArray *out) {
+    EwiseOP(a, b, out, std::greater_equal<>());
+}
+void ScalarGe(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+    ScalarOp(a, val, out, std::greater_equal<>());
+}
+
+void EwiseLog(const AlignedArray &a, AlignedArray *out) {
+    EwiseOP(a, out, logf);
+}
+void EwiseExp(const AlignedArray &a, AlignedArray *out) {
+    EwiseOP(a, out, expf);
+}
+void EwiseTanh(const AlignedArray &a, AlignedArray *out) {
+    EwiseOP(a, out, tanhf);
+}
 
 /// END YOUR SOLUTION
 
 void Matmul(const AlignedArray &a, const AlignedArray &b, AlignedArray *out,
             uint32_t m, uint32_t n, uint32_t p) {
     /**
-     * Multiply two (compact) matrices into an output (also compact) matrix. For
-     * this implementation you can use the "naive" three-loop algorithm.
+     * Multiply two (compact) matrices into an output (also compact) matrix.
+     * For this implementation you can use the "naive" three-loop algorithm.
      *
      * Args:
      *   a: compact 2D array of size m x n
@@ -239,18 +310,18 @@ inline void AlignedDot(const float *__restrict__ a, const float *__restrict__ b,
                        float *__restrict__ out) {
 
     /**
-     * Multiply together two TILE x TILE matrices, and _add _the result to out
-     * (it is important to add the result to the existing out, which you should
-     * not set to zero beforehand).  We are including the compiler flags here
-     * that enable the compile to properly use vector operators to implement
-     * this function.  Specifically, the __restrict__ keyword indicates to the
-     * compile that a, b, and out don't have any overlapping memory (which is
-     * necessary in order for vector operations to be equivalent to their
-     * non-vectorized counterparts (imagine what could happen otherwise if a, b,
-     * and out had overlapping memory).  Similarly the __builtin_assume_aligned
-     * keyword tells the compiler that the input array will be aligned to the
-     * appropriate blocks in memory, which also helps the compiler vectorize the
-     * code.
+     * Multiply together two TILE x TILE matrices, and _add _the result to
+     * out (it is important to add the result to the existing out, which you
+     * should not set to zero beforehand).  We are including the compiler
+     * flags here that enable the compile to properly use vector operators
+     * to implement this function.  Specifically, the __restrict__ keyword
+     * indicates to the compile that a, b, and out don't have any
+     * overlapping memory (which is necessary in order for vector operations
+     * to be equivalent to their non-vectorized counterparts (imagine what
+     * could happen otherwise if a, b, and out had overlapping memory).
+     * Similarly the __builtin_assume_aligned keyword tells the compiler
+     * that the input array will be aligned to the appropriate blocks in
+     * memory, which also helps the compiler vectorize the code.
      *
      * Args:
      *   a: compact 2D array of size TILE x TILE
@@ -272,21 +343,21 @@ void MatmulTiled(const AlignedArray &a, const AlignedArray &b,
     /**
      * Matrix multiplication on tiled representations of array.  In this
      * setting, a, b, and out are all *4D* compact arrays of the appropriate
-     * size, e.g. a is an array of size a[m/TILE][n/TILE][TILE][TILE] You should
-     * do the multiplication tile-by-tile to improve performance of the array
-     * (i.e., this function should call `AlignedDot()` implemented above).
+     * size, e.g. a is an array of size a[m/TILE][n/TILE][TILE][TILE] You
+     * should do the multiplication tile-by-tile to improve performance of
+     * the array (i.e., this function should call `AlignedDot()` implemented
+     * above).
      *
      * Note that this function will only be called when m, n, p are all
-     * multiples of TILE, so you can assume that this division happens without
-     * any remainder.
+     * multiples of TILE, so you can assume that this division happens
+     * without any remainder.
      *
      * Args:
      *   a: compact 4D array of size m/TILE x n/TILE x TILE x TILE
      *   b: compact 4D array of size n/TILE x p/TILE x TILE x TILE
-     *   out: compact 4D array of size m/TILE x p/TILE x TILE x TILE to write to
-     *   m: rows of a / out
-     *   n: columns of a / rows of b
-     *   p: columns of b / out
+     *   out: compact 4D array of size m/TILE x p/TILE x TILE x TILE to
+     * write to m: rows of a / out n: columns of a / rows of b p: columns of
+     * b / out
      *
      */
     /// BEGIN YOUR SOLUTION
@@ -299,9 +370,9 @@ void ReduceMax(const AlignedArray &a, AlignedArray *out, size_t reduce_size) {
      * Reduce by taking maximum over `reduce_size` contiguous blocks.
      *
      * Args:
-     *   a: compact array of size a.size = out.size * reduce_size to reduce over
-     *   out: compact array to write into
-     *   reduce_size: size of the dimension to reduce over
+     *   a: compact array of size a.size = out.size * reduce_size to reduce
+     * over out: compact array to write into reduce_size: size of the
+     * dimension to reduce over
      */
 
     /// BEGIN YOUR SOLUTION
@@ -314,9 +385,9 @@ void ReduceSum(const AlignedArray &a, AlignedArray *out, size_t reduce_size) {
      * Reduce by taking sum over `reduce_size` contiguous blocks.
      *
      * Args:
-     *   a: compact array of size a.size = out.size * reduce_size to reduce over
-     *   out: compact array to write into
-     *   reduce_size: size of the dimension to reduce over
+     *   a: compact array of size a.size = out.size * reduce_size to reduce
+     * over out: compact array to write into reduce_size: size of the
+     * dimension to reduce over
      */
 
     /// BEGIN YOUR SOLUTION
@@ -363,22 +434,22 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
     m.def("ewise_add", EwiseAdd);
     m.def("scalar_add", ScalarAdd);
 
-    // m.def("ewise_mul", EwiseMul);
-    // m.def("scalar_mul", ScalarMul);
-    // m.def("ewise_div", EwiseDiv);
-    // m.def("scalar_div", ScalarDiv);
-    // m.def("scalar_power", ScalarPower);
+    m.def("ewise_mul", EwiseMul);
+    m.def("scalar_mul", ScalarMul);
+    m.def("ewise_div", EwiseDiv);
+    m.def("scalar_div", ScalarDiv);
+    m.def("scalar_power", ScalarPower);
 
-    // m.def("ewise_maximum", EwiseMaximum);
-    // m.def("scalar_maximum", ScalarMaximum);
-    // m.def("ewise_eq", EwiseEq);
-    // m.def("scalar_eq", ScalarEq);
-    // m.def("ewise_ge", EwiseGe);
-    // m.def("scalar_ge", ScalarGe);
+    m.def("ewise_maximum", EwiseMaximum);
+    m.def("scalar_maximum", ScalarMaximum);
+    m.def("ewise_eq", EwiseEq);
+    m.def("scalar_eq", ScalarEq);
+    m.def("ewise_ge", EwiseGe);
+    m.def("scalar_ge", ScalarGe);
 
-    // m.def("ewise_log", EwiseLog);
-    // m.def("ewise_exp", EwiseExp);
-    // m.def("ewise_tanh", EwiseTanh);
+    m.def("ewise_log", EwiseLog);
+    m.def("ewise_exp", EwiseExp);
+    m.def("ewise_tanh", EwiseTanh);
 
     m.def("matmul", Matmul);
     m.def("matmul_tiled", MatmulTiled);
