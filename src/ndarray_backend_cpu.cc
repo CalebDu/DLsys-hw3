@@ -102,7 +102,29 @@ void EwiseSetitem(const AlignedArray &a, AlignedArray *out,
      * compact)
      */
     /// BEGIN YOUR SOLUTION
-
+    int ndim = shape.size();
+    std::vector<uint32_t> idxs(ndim, 0);
+    long long cnt = 0, i = 0;
+    long long dim =
+        std::accumulate(shape.begin(), shape.end(), 1LL, std::multiplies<>());
+    while (cnt < dim) {
+        i = 0;
+        for (int n = 0; n < ndim; n++) {
+            i += strides[n] * idxs[n];
+        }
+        out->ptr[offset + i] = a.ptr[cnt++];
+        idxs[ndim - 1]++;
+        int carry = 0;
+        for (int n = ndim - 1; n >= 0; n--) {
+            int sum = idxs[n] + carry;
+            carry = sum / shape[n];
+            idxs[n] = sum % shape[n];
+            if (carry == 0) {
+                break;
+            }
+        }
+    }
+    return;
     /// END YOUR SOLUTION
 }
 
@@ -123,7 +145,30 @@ void ScalarSetitem(const size_t size, scalar_t val, AlignedArray *out,
      */
 
     /// BEGIN YOUR SOLUTION
-
+    int ndim = shape.size();
+    std::vector<uint32_t> idxs(ndim, 0);
+    long long cnt = 0, i = 0;
+    long long dim =
+        std::accumulate(shape.begin(), shape.end(), 1LL, std::multiplies<>());
+    while (cnt < size) {
+        i = 0;
+        for (int n = 0; n < ndim; n++) {
+            i += strides[n] * idxs[n];
+        }
+        out->ptr[offset + i] = val;
+        cnt++;
+        idxs[ndim - 1]++;
+        int carry = 0;
+        for (int n = ndim - 1; n >= 0; n--) {
+            int sum = idxs[n] + carry;
+            carry = sum / shape[n];
+            idxs[n] = sum % shape[n];
+            if (carry == 0) {
+                break;
+            }
+        }
+    }
+    return;
     /// END YOUR SOLUTION
 }
 

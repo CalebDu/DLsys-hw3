@@ -7,6 +7,8 @@ from torch import device
 from . import ndarray_backend_numpy
 from . import ndarray_backend_cpu
 import copy
+
+
 # math.prod not in Python 3.7
 def prod(x):
     return reduce(operator.mul, x, 1)
@@ -138,7 +140,8 @@ class NDArray:
         array."""
         array = NDArray.__new__(NDArray)
         array._shape = tuple(shape)
-        array._strides = NDArray.compact_strides(shape) if strides is None else strides
+        array._strides = NDArray.compact_strides(
+            shape) if strides is None else strides
         array._offset = offset
         array._device = device if device is not None else default_device()
         if handle is None:
@@ -194,17 +197,14 @@ class NDArray:
 
     def numpy(self):
         """ convert to a numpy array """
-        return self.device.to_numpy(
-            self._handle, self.shape, self.strides, self._offset
-        )
+        return self.device.to_numpy(self._handle, self.shape, self.strides,
+                                    self._offset)
 
     def is_compact(self):
         """Return true if array is compact in memory and internal size equals product
         of the shape dimensions"""
-        return (
-            self._strides == self.compact_strides(self._shape)
-            and prod(self.shape) == self._handle.size
-        )
+        return (self._strides == self.compact_strides(self._shape)
+                and prod(self.shape) == self._handle.size)
 
     def compact(self):
         """ Convert a matrix to be compact """
@@ -212,21 +212,21 @@ class NDArray:
             return self
         else:
             out = NDArray.make(self.shape, device=self.device)
-            self.device.compact(
-                self._handle, out._handle, self.shape, self.strides, self._offset
-            )
+            self.device.compact(self._handle, out._handle, self.shape,
+                                self.strides, self._offset)
             return out
 
     def as_strided(self, shape, strides):
         """ Restride the matrix without copying memory. """
         assert len(shape) == len(strides)
-        return NDArray.make(
-            shape, strides=strides, device=self.device, handle=self._handle
-        )
+        return NDArray.make(shape,
+                            strides=strides,
+                            device=self.device,
+                            handle=self._handle)
 
     @property
     def flat(self):
-        return self.reshape((self.size,))
+        return self.reshape((self.size, ))
 
     def reshape(self, new_shape):
         """
@@ -243,12 +243,13 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        if np.prod(self.shape)!=np.prod(new_shape):
+        if np.prod(self.shape) != np.prod(new_shape):
             raise ValueError
-        
-        new_stride = ((np.cumprod(new_shape[::-1])/new_shape[::-1]))[::-1]
+
+        new_stride = ((np.cumprod(new_shape[::-1]) / new_shape[::-1]))[::-1]
         new_stride = tuple(map(int, new_stride))
-        ret = self.make(new_shape, new_stride, self.device, self._handle, self._offset)
+        ret = self.make(new_shape, new_stride, self.device, self._handle,
+                        self._offset)
         return ret
         ### END YOUR SOLUTION
 
@@ -274,7 +275,8 @@ class NDArray:
         ### BEGIN YOUR SOLUTION
         new_shape = tuple(np.take(self.shape, new_axes))
         new_stride = tuple(np.take(self.strides, new_axes))
-        ret = self.make(new_shape, new_stride, self.device, self._handle, self._offset)
+        ret = self.make(new_shape, new_stride, self.device, self._handle,
+                        self._offset)
 
         return ret
         ### END YOUR SOLUTION
@@ -299,12 +301,13 @@ class NDArray:
         ### BEGIN YOUR SOLUTION
         new_stride = list(self.strides)
         for i, pair in enumerate(zip(self.shape, new_shape)):
-            if pair[0]!=pair[1] and pair[0]!=1:
+            if pair[0] != pair[1] and pair[0] != 1:
                 raise ValueError
-            elif pair[0]!=pair[1] and pair[0]==1: 
+            elif pair[0] != pair[1] and pair[0] == 1:
                 new_stride[i] = 0
-            
-        ret = self.make(new_shape, tuple(new_stride), self.device, self._handle, self._offset)
+
+        ret = self.make(new_shape, tuple(new_stride), self.device,
+                        self._handle, self._offset)
         return ret
         ### END YOUR SOLUTION
 
@@ -358,14 +361,13 @@ class NDArray:
 
         # handle singleton as tuple, everything as slices
         if not isinstance(idxs, tuple):
-            idxs = (idxs,)
-        idxs = tuple(
-            [
-                self.process_slice(s, i) if isinstance(s, slice) else slice(s, s + 1, 1)
-                for i, s in enumerate(idxs)
-            ]
-        )
-        assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
+            idxs = (idxs, )
+        idxs = tuple([
+            self.process_slice(s, i) if isinstance(s, slice) else slice(
+                s, s + 1, 1) for i, s in enumerate(idxs)
+        ])
+        assert len(
+            idxs) == self.ndim, "Need indexes equal to number of dimensions"
 
         ### BEGIN YOUR SOLUTION
         new_stride = list(self.strides)
@@ -374,8 +376,13 @@ class NDArray:
             assert idx.step > 0 and idx.stop - idx.start > 0
             new_offset += self.strides[i] * idx.start
             new_stride[i] *= idx.step
-        new_shape = tuple((idx.stop-idx.start)//idx.step for idx in idxs)
-        ret = self.make(new_shape, strides=tuple(new_stride),offset=new_offset, device=self.device, handle=self._handle)
+        new_shape = tuple(1 + (idx.stop - idx.start - 1) // idx.step
+                          for idx in idxs)
+        ret = self.make(new_shape,
+                        strides=tuple(new_stride),
+                        offset=new_offset,
+                        device=self.device,
+                        handle=self._handle)
 
         return ret
         ### END YOUR SOLUTION
@@ -412,15 +419,15 @@ class NDArray:
         out = NDArray.make(self.shape, device=self.device)
         if isinstance(other, NDArray):
             assert self.shape == other.shape, "operation needs two equal-sized arrays"
-            ewise_func(self.compact()._handle, other.compact()._handle, out._handle)
+            ewise_func(self.compact()._handle,
+                       other.compact()._handle, out._handle)
         else:
             scalar_func(self.compact()._handle, other, out._handle)
         return out
 
     def __add__(self, other):
-        return self.ewise_or_scalar(
-            other, self.device.ewise_add, self.device.scalar_add
-        )
+        return self.ewise_or_scalar(other, self.device.ewise_add,
+                                    self.device.scalar_add)
 
     __radd__ = __add__
 
@@ -431,16 +438,14 @@ class NDArray:
         return other + (-self)
 
     def __mul__(self, other):
-        return self.ewise_or_scalar(
-            other, self.device.ewise_mul, self.device.scalar_mul
-        )
+        return self.ewise_or_scalar(other, self.device.ewise_mul,
+                                    self.device.scalar_mul)
 
     __rmul__ = __mul__
 
     def __truediv__(self, other):
-        return self.ewise_or_scalar(
-            other, self.device.ewise_div, self.device.scalar_div
-        )
+        return self.ewise_or_scalar(other, self.device.ewise_div,
+                                    self.device.scalar_div)
 
     def __neg__(self):
         return self * (-1)
@@ -451,16 +456,17 @@ class NDArray:
         return out
 
     def maximum(self, other):
-        return self.ewise_or_scalar(
-            other, self.device.ewise_maximum, self.device.scalar_maximum
-        )
+        return self.ewise_or_scalar(other, self.device.ewise_maximum,
+                                    self.device.scalar_maximum)
 
     ### Binary operators all return (0.0, 1.0) floating point values, could of course be optimized
     def __eq__(self, other):
-        return self.ewise_or_scalar(other, self.device.ewise_eq, self.device.scalar_eq)
+        return self.ewise_or_scalar(other, self.device.ewise_eq,
+                                    self.device.scalar_eq)
 
     def __ge__(self, other):
-        return self.ewise_or_scalar(other, self.device.ewise_ge, self.device.scalar_ge)
+        return self.ewise_or_scalar(other, self.device.ewise_ge,
+                                    self.device.scalar_ge)
 
     def __ne__(self, other):
         return 1 - (self == other)
@@ -514,8 +520,7 @@ class NDArray:
 
         # if the matrix is aligned, use tiled matrix multiplication
         if hasattr(self.device, "matmul_tiled") and all(
-            d % self.device.__tile_size__ == 0 for d in (m, n, p)
-        ):
+                d % self.device.__tile_size__ == 0 for d in (m, n, p)):
 
             def tile(a, tile):
                 return a.as_strided(
@@ -526,46 +531,46 @@ class NDArray:
             t = self.device.__tile_size__
             a = tile(self.compact(), t).compact()
             b = tile(other.compact(), t).compact()
-            out = NDArray.make((a.shape[0], b.shape[1], t, t), device=self.device)
-            self.device.matmul_tiled(a._handle, b._handle, out._handle, m, n, p)
+            out = NDArray.make((a.shape[0], b.shape[1], t, t),
+                               device=self.device)
+            self.device.matmul_tiled(a._handle, b._handle, out._handle, m, n,
+                                     p)
 
-            return (
-                out.permute((0, 2, 1, 3))
-                .compact()
-                .reshape((self.shape[0], other.shape[1]))
-            )
+            return (out.permute((0, 2, 1, 3)).compact().reshape(
+                (self.shape[0], other.shape[1])))
 
         else:
             out = NDArray.make((m, p), device=self.device)
-            self.device.matmul(
-                self.compact()._handle, other.compact()._handle, out._handle, m, n, p
-            )
+            self.device.matmul(self.compact()._handle,
+                               other.compact()._handle, out._handle, m, n, p)
             return out
 
     ### Reductions, i.e., sum/max over all element or over given axis
     def reduce_view_out(self, axis):
         """ Return a view to the array set up for reduction functions and output array. """
         if axis is None:
-            view = self.reshape((1,) * (self.ndim - 1) + (prod(self.shape),))
-            out = NDArray.make((1,) * self.ndim, device=self.device)
+            view = self.reshape((1, ) * (self.ndim - 1) + (prod(self.shape), ))
+            out = NDArray.make((1, ) * self.ndim, device=self.device)
         else:
             view = self.permute(
-                tuple([a for a in range(self.ndim) if a != axis]) + (axis,)
-            )
+                tuple([a for a in range(self.ndim) if a != axis]) + (axis, ))
             out = NDArray.make(
-                tuple([1 if i == axis else s for i, s in enumerate(self.shape)]),
+                tuple(
+                    [1 if i == axis else s for i, s in enumerate(self.shape)]),
                 device=self.device,
             )
         return view, out
 
     def sum(self, axis=None):
         view, out = self.reduce_view_out(axis)
-        self.device.reduce_sum(view.compact()._handle, out._handle, view.shape[-1])
+        self.device.reduce_sum(view.compact()._handle, out._handle,
+                               view.shape[-1])
         return out
 
     def max(self, axis=None):
         view, out = self.reduce_view_out(axis)
-        self.device.reduce_max(view.compact()._handle, out._handle, view.shape[-1])
+        self.device.reduce_max(view.compact()._handle, out._handle,
+                               view.shape[-1])
         return out
 
 
