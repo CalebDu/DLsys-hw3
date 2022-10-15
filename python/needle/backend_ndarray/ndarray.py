@@ -1,7 +1,9 @@
+from multiprocessing.sharedctypes import Value
 import operator
 import math
 from functools import reduce
 import numpy as np
+from torch import device
 from . import ndarray_backend_numpy
 from . import ndarray_backend_cpu
 import copy
@@ -366,7 +368,16 @@ class NDArray:
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_stride = list(self.strides)
+        new_offset = 0
+        for i, idx in enumerate(idxs):
+            assert idx.step > 0 and idx.stop - idx.start > 0
+            new_offset += self.strides[i] * idx.start
+            new_stride[i] *= idx.step
+        new_shape = tuple((idx.stop-idx.start)//idx.step for idx in idxs)
+        ret = self.make(new_shape, strides=tuple(new_stride),offset=new_offset, device=self.device, handle=self._handle)
+
+        return ret
         ### END YOUR SOLUTION
 
     def __setitem__(self, idxs, other):
