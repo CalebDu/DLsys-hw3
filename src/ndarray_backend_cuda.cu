@@ -14,7 +14,10 @@ namespace cuda {
 #define TILE 4
 typedef float scalar_t;
 const size_t ELEM_SIZE = sizeof(scalar_t);
-
+using scalarfn = scalar_t (*)(scalar_t);
+using ewisefn = scalar_t (*)(scalar_t, scalar_t);
+// typedef scalar_t (*scalarfn)(scalar_t);
+// typedef scalar_t (*ewisefn)(scalar_t, scalar_t);
 struct CudaArray {
     CudaArray(const size_t size) {
         cudaError_t err = cudaMalloc(&ptr, size * ELEM_SIZE);
@@ -257,6 +260,139 @@ void ScalarAdd(const CudaArray &a, scalar_t val, CudaArray *out) {
  */
 
 /// BEGIN YOUR SOLUTION
+__device__ __forceinline__ scalar_t multiple(scalar_t a, scalar_t b) {
+    return a * b;
+}
+__device__ __forceinline__ scalar_t divide(scalar_t a, scalar_t b) {
+    return a / b;
+}
+__device__ __forceinline__ scalar_t eq(scalar_t a, scalar_t b) {
+    return a == b;
+}
+__device__ __forceinline__ scalar_t ge(scalar_t a, scalar_t b) {
+    return a >= b;
+}
+__device__ __forceinline__ scalar_t max(scalar_t a, scalar_t b) {
+    return fmax(a, b);
+}
+__device__ ewisefn d_mul = multiple;
+__device__ ewisefn d_div = divide;
+__device__ ewisefn d_eq = eq;
+__device__ ewisefn d_ge = ge;
+__device__ ewisefn d_max = fmax;
+__device__ ewisefn d_pow = powf;
+__device__ scalarfn d_exp = expf;
+__device__ scalarfn d_tanh = tanhf;
+__device__ scalarfn d_log = logf;
+
+__global__ void EwiseOP(const scalar_t *a, scalar_t *out, scalarfn op) {
+    size_t gid = threadIdx.x + blockIdx.x * blockDim.x;
+    out[gid] = (*op)(a[gid]);
+}
+
+__global__ void EwiseOP(const scalar_t *a, const scalar_t *b, scalar_t *out,
+                        ewisefn op) {
+    size_t gid = threadIdx.x + blockIdx.x * blockDim.x;
+    out[gid] = (*op)(a[gid], b[gid]);
+}
+
+__global__ void ScalarOp(const scalar_t *a, scalar_t val, scalar_t *out,
+                         ewisefn op) {
+    size_t gid = threadIdx.x + blockIdx.x * blockDim.x;
+    out[gid] = (*op)(a[gid], val);
+}
+
+void EwiseMul(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn mul;
+    cudaMemcpyFromSymbol(&mul, d_mul, sizeof(ewisefn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, mul);
+}
+
+void ScalarMul(const CudaArray &a, scalar_t val, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn mul;
+    cudaMemcpyFromSymbol(&mul, d_mul, sizeof(ewisefn));
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, mul);
+}
+void EwiseDiv(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn div;
+    cudaMemcpyFromSymbol(&div, d_div, sizeof(ewisefn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, div);
+}
+void ScalarDiv(const CudaArray &a, scalar_t val, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn div;
+    cudaMemcpyFromSymbol(&div, d_div, sizeof(ewisefn));
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, div);
+}
+
+void ScalarPower(const CudaArray &a, scalar_t val, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn pow;
+    cudaMemcpyFromSymbol(&pow, d_pow, sizeof(ewisefn));
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, pow);
+}
+
+void EwiseMaximum(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn maximum;
+    cudaMemcpyFromSymbol(&maximum, d_max, sizeof(ewisefn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, maximum);
+}
+
+void ScalarMaximum(const CudaArray &a, scalar_t val, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn maximum;
+    cudaMemcpyFromSymbol(&maximum, d_max, sizeof(ewisefn));
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, maximum);
+}
+
+void EwiseEq(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn eq;
+    cudaMemcpyFromSymbol(&eq, d_eq, sizeof(ewisefn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, eq);
+}
+void ScalarEq(const CudaArray &a, scalar_t val, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn eq;
+    cudaMemcpyFromSymbol(&eq, d_eq, sizeof(ewisefn));
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, eq);
+}
+
+void EwiseGe(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn ge;
+    cudaMemcpyFromSymbol(&ge, d_ge, sizeof(ewisefn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, ge);
+}
+void ScalarGe(const CudaArray &a, scalar_t val, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    ewisefn ge;
+    cudaMemcpyFromSymbol(&ge, d_ge, sizeof(ewisefn));
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, ge);
+}
+
+void EwiseLog(const CudaArray &a, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    scalarfn log;
+    cudaMemcpyFromSymbol(&log, d_log, sizeof(scalarfn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, log);
+}
+void EwiseExp(const CudaArray &a, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    scalarfn exp;
+    cudaMemcpyFromSymbol(&exp, d_exp, sizeof(scalarfn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, exp);
+}
+void EwiseTanh(const CudaArray &a, CudaArray *out) {
+    auto dim = CudaOneDim(out->size);
+    scalarfn tanh;
+    cudaMemcpyFromSymbol(&tanh, d_tanh, sizeof(scalarfn));
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, tanh);
+}
 
 /// END YOUR SOLUTION
 
@@ -267,19 +403,19 @@ void ScalarAdd(const CudaArray &a, scalar_t val, CudaArray *out) {
 void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
             uint32_t N, uint32_t P) {
     /**
-     * Multiply two (compact) matrices into an output (also comapct) matrix. You
-     * will want to look at the lecture and notes on GPU-based linear algebra to
-     * see how to do this.  Since ultimately mugrade is just evaluating
-     * correctness, you _can_ implement a version that simply parallelizes over
-     * (i,j) entries in the output array.  However, to really get the full
-     * benefit of this problem, we would encourage you to use cooperative
-     * fetching, shared memory register tiling, and other ideas covered in the
-     * class notes.  Note that unlike the tiled matmul function in the CPU
-     * backend, here you should implement a single function that works across
-     * all size matrices, whether or not they are a multiple of a tile size.  As
-     * with previous CUDA implementations, this function here will largely just
-     * set up the kernel call, and you should implement the logic in a separate
-     * MatmulKernel() call.
+     * Multiply two (compact) matrices into an output (also comapct) matrix.
+     * You will want to look at the lecture and notes on GPU-based linear
+     * algebra to see how to do this.  Since ultimately mugrade is just
+     * evaluating correctness, you _can_ implement a version that simply
+     * parallelizes over (i,j) entries in the output array.  However, to
+     * really get the full benefit of this problem, we would encourage you
+     * to use cooperative fetching, shared memory register tiling, and other
+     * ideas covered in the class notes.  Note that unlike the tiled matmul
+     * function in the CPU backend, here you should implement a single
+     * function that works across all size matrices, whether or not they are
+     * a multiple of a tile size.  As with previous CUDA implementations,
+     * this function here will largely just set up the kernel call, and you
+     * should implement the logic in a separate MatmulKernel() call.
      *
      *
      * Args:
@@ -303,13 +439,13 @@ void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
 void ReduceMax(const CudaArray &a, CudaArray *out, size_t reduce_size) {
     /**
      * Reduce by taking maximum over `reduce_size` contiguous blocks.  Even
-     * though it is inefficient, for simplicity you can perform each reduction
-     * in a single CUDA thread.
+     * though it is inefficient, for simplicity you can perform each
+     * reduction in a single CUDA thread.
      *
      * Args:
-     *   a: compact array of size a.size = out.size * reduce_size to reduce over
-     *   out: compact array to write into
-     *   redice_size: size of the dimension to reduce over
+     *   a: compact array of size a.size = out.size * reduce_size to reduce
+     * over out: compact array to write into redice_size: size of the
+     * dimension to reduce over
      */
     /// BEGIN YOUR SOLUTION
 
@@ -318,13 +454,14 @@ void ReduceMax(const CudaArray &a, CudaArray *out, size_t reduce_size) {
 
 void ReduceSum(const CudaArray &a, CudaArray *out, size_t reduce_size) {
     /**
-     * Reduce by taking summation over `reduce_size` contiguous blocks.  Again,
-     * for simplicity you can perform each reduction in a single CUDA thread.
+     * Reduce by taking summation over `reduce_size` contiguous blocks.
+     * Again, for simplicity you can perform each reduction in a single CUDA
+     * thread.
      *
      * Args:
-     *   a: compact array of size a.size = out.size * reduce_size to reduce over
-     *   out: compact array to write into
-     *   redice_size: size of the dimension to reduce over
+     *   a: compact array of size a.size = out.size * reduce_size to reduce
+     * over out: compact array to write into redice_size: size of the
+     * dimension to reduce over
      */
     /// BEGIN YOUR SOLUTION
 
@@ -386,22 +523,22 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
     m.def("ewise_add", EwiseAdd);
     m.def("scalar_add", ScalarAdd);
 
-    // m.def("ewise_mul", EwiseMul);
-    // m.def("scalar_mul", ScalarMul);
-    // m.def("ewise_div", EwiseDiv);
-    // m.def("scalar_div", ScalarDiv);
-    // m.def("scalar_power", ScalarPower);
+    m.def("ewise_mul", EwiseMul);
+    m.def("scalar_mul", ScalarMul);
+    m.def("ewise_div", EwiseDiv);
+    m.def("scalar_div", ScalarDiv);
+    m.def("scalar_power", ScalarPower);
 
-    // m.def("ewise_maximum", EwiseMaximum);
-    // m.def("scalar_maximum", ScalarMaximum);
-    // m.def("ewise_eq", EwiseEq);
-    // m.def("scalar_eq", ScalarEq);
-    // m.def("ewise_ge", EwiseGe);
-    // m.def("scalar_ge", ScalarGe);
+    m.def("ewise_maximum", EwiseMaximum);
+    m.def("scalar_maximum", ScalarMaximum);
+    m.def("ewise_eq", EwiseEq);
+    m.def("scalar_eq", ScalarEq);
+    m.def("ewise_ge", EwiseGe);
+    m.def("scalar_ge", ScalarGe);
 
-    // m.def("ewise_log", EwiseLog);
-    // m.def("ewise_exp", EwiseExp);
-    // m.def("ewise_tanh", EwiseTanh);
+    m.def("ewise_log", EwiseLog);
+    m.def("ewise_exp", EwiseExp);
+    m.def("ewise_tanh", EwiseTanh);
 
     m.def("matmul", Matmul);
 
