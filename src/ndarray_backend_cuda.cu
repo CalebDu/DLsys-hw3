@@ -135,6 +135,17 @@ void Compact(const CudaArray &a, CudaArray *out, std::vector<uint32_t> shape,
                                            offset);
 }
 
+__global__ void EwiseSetitemKernel(const scalar_t *a, scalar_t *out,
+                                   CudaVec shape, CudaVec strides,
+                                   size_t offset) {
+    size_t gid = threadIdx.x + blockDim.x * blockIdx.x;
+    size_t idx = 0, gid_ = gid;
+    for (int i = shape.size - 1; i >= 0; i--) {
+        idx += (gid_ % shape.data[i]) * strides.data[i];
+        gid_ /= shape.data[i];
+    }
+    out[offset + idx] = a[gid];
+}
 void EwiseSetitem(const CudaArray &a, CudaArray *out,
                   std::vector<uint32_t> shape, std::vector<uint32_t> strides,
                   size_t offset) {
@@ -152,10 +163,23 @@ void EwiseSetitem(const CudaArray &a, CudaArray *out,
      * compact)
      */
     /// BEGIN YOUR SOLUTION
-
+    auto dim = CudaOneDim(a.size);
+    EwiseSetitemKernel<<<dim.grid, dim.block>>>(
+        a.ptr, out->ptr, VecToCuda(shape), VecToCuda(strides), offset);
     /// END YOUR SOLUTION
 }
 
+__global__ void ScalarSetitemKernel(scalar_t val, scalar_t *out, CudaVec shape,
+                                    CudaVec strides, size_t offset) {
+
+    size_t gid = threadIdx.x + blockDim.x * blockIdx.x;
+    size_t idx = 0, gid_ = gid;
+    for (int i = shape.size - 1; i >= 0; i--) {
+        idx += (gid_ % shape.data[i]) * strides.data[i];
+        gid_ /= shape.data[i];
+    }
+    out[offset + idx] = val;
+}
 void ScalarSetitem(size_t size, scalar_t val, CudaArray *out,
                    std::vector<uint32_t> shape, std::vector<uint32_t> strides,
                    size_t offset) {
@@ -172,7 +196,9 @@ void ScalarSetitem(size_t size, scalar_t val, CudaArray *out,
      *   offset: offset of the out array
      */
     /// BEGIN YOUR SOLUTION
-
+    auto dim = CudaOneDim(size);
+    ScalarSetitemKernel<<<dim.grid, dim.block>>>(
+        val, out->ptr, VecToCuda(shape), VecToCuda(strides), offset);
     /// END YOUR SOLUTION
 }
 
