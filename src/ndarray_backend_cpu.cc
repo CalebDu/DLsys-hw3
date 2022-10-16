@@ -3,6 +3,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <bits/stdc++.h>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -367,15 +368,22 @@ void MatmulTiled(const AlignedArray &a, const AlignedArray &b,
 
 void ReduceMax(const AlignedArray &a, AlignedArray *out, size_t reduce_size) {
     /**
-     * Reduce by taking maximum over `reduce_size` contiguous blocks.
+     * Reduce by taking sum over `reduce_size` contiguous blocks.
      *
      * Args:
-     *   a: compact array of size a.size = out.size * reduce_size to reduce
-     * over out: compact array to write into reduce_size: size of the
-     * dimension to reduce over
+     *  a: compact array of size a.size = out.size * reduce_size to reduce over
+     *  out: compact array to write into
+     *  reduce_size: size of the dimension to reduce over
      */
 
     /// BEGIN YOUR SOLUTION
+    for (int i = 0; i < out->size; i++) {
+        scalar_t maxValue = a.ptr[i * reduce_size];
+        for (int j = i * reduce_size; j < (i + 1) * reduce_size; j++) {
+            maxValue = std::max(maxValue, a.ptr[j]);
+        }
+        out->ptr[i] = maxValue;
+    }
 
     /// END YOUR SOLUTION
 }
@@ -385,12 +393,18 @@ void ReduceSum(const AlignedArray &a, AlignedArray *out, size_t reduce_size) {
      * Reduce by taking sum over `reduce_size` contiguous blocks.
      *
      * Args:
-     *   a: compact array of size a.size = out.size * reduce_size to reduce
-     * over out: compact array to write into reduce_size: size of the
-     * dimension to reduce over
+     *  a: compact array of size a.size = out.size * reduce_size to reduce over
+     *  out: compact array to write into
+     *  reduce_size: size of the dimension to reduce over
      */
 
     /// BEGIN YOUR SOLUTION
+    for (int i = 0; i < out->size; i++) {
+        scalar_t sum = std::accumulate(a.ptr + i * reduce_size,
+                                       a.ptr + (i + 1) * reduce_size,
+                                       static_cast<scalar_t>(0.0f));
+        out->ptr[i] = sum;
+    }
 
     /// END YOUR SOLUTION
 }
