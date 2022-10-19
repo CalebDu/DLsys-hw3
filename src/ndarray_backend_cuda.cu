@@ -108,7 +108,10 @@ __global__ void CompactKernel(const scalar_t *a, scalar_t *out, size_t size,
         idx += (gid_ % shape.data[i]) * strides.data[i];
         gid_ /= shape.data[i];
     }
-    out[gid] = a[offset + idx];
+    if (gid < size) {
+        out[gid] = a[offset + idx];
+    }
+
     /// END YOUR SOLUTION
 }
 
@@ -139,7 +142,7 @@ void Compact(const CudaArray &a, CudaArray *out, std::vector<uint32_t> shape,
 }
 
 __global__ void EwiseSetitemKernel(const scalar_t *a, scalar_t *out,
-                                   CudaVec shape, CudaVec strides,
+                                   size_t size, CudaVec shape, CudaVec strides,
                                    size_t offset) {
     size_t gid = threadIdx.x + blockDim.x * blockIdx.x;
     size_t idx = 0, gid_ = gid;
@@ -147,7 +150,9 @@ __global__ void EwiseSetitemKernel(const scalar_t *a, scalar_t *out,
         idx += (gid_ % shape.data[i]) * strides.data[i];
         gid_ /= shape.data[i];
     }
-    out[offset + idx] = a[gid];
+    if (gid < size) {
+        out[offset + idx] = a[gid];
+    }
 }
 void EwiseSetitem(const CudaArray &a, CudaArray *out,
                   std::vector<uint32_t> shape, std::vector<uint32_t> strides,
@@ -168,12 +173,13 @@ void EwiseSetitem(const CudaArray &a, CudaArray *out,
     /// BEGIN YOUR SOLUTION
     auto dim = CudaOneDim(a.size);
     EwiseSetitemKernel<<<dim.grid, dim.block>>>(
-        a.ptr, out->ptr, VecToCuda(shape), VecToCuda(strides), offset);
+        a.ptr, out->ptr, a.size, VecToCuda(shape), VecToCuda(strides), offset);
     /// END YOUR SOLUTION
 }
 
-__global__ void ScalarSetitemKernel(scalar_t val, scalar_t *out, CudaVec shape,
-                                    CudaVec strides, size_t offset) {
+__global__ void ScalarSetitemKernel(scalar_t val, scalar_t *out, size_t size,
+                                    CudaVec shape, CudaVec strides,
+                                    size_t offset) {
 
     size_t gid = threadIdx.x + blockDim.x * blockIdx.x;
     size_t idx = 0, gid_ = gid;
@@ -181,7 +187,9 @@ __global__ void ScalarSetitemKernel(scalar_t val, scalar_t *out, CudaVec shape,
         idx += (gid_ % shape.data[i]) * strides.data[i];
         gid_ /= shape.data[i];
     }
-    out[offset + idx] = val;
+    if (gid < size) {
+        out[offset + idx] = val;
+    }
 }
 void ScalarSetitem(size_t size, scalar_t val, CudaArray *out,
                    std::vector<uint32_t> shape, std::vector<uint32_t> strides,
@@ -201,7 +209,7 @@ void ScalarSetitem(size_t size, scalar_t val, CudaArray *out,
     /// BEGIN YOUR SOLUTION
     auto dim = CudaOneDim(size);
     ScalarSetitemKernel<<<dim.grid, dim.block>>>(
-        val, out->ptr, VecToCuda(shape), VecToCuda(strides), offset);
+        val, out->ptr, size, VecToCuda(shape), VecToCuda(strides), offset);
     /// END YOUR SOLUTION
 }
 
@@ -285,113 +293,123 @@ __device__ scalarfn d_exp = expf;
 __device__ scalarfn d_tanh = tanhf;
 __device__ scalarfn d_log = logf;
 
-__global__ void EwiseOP(const scalar_t *a, scalar_t *out, scalarfn op) {
+__global__ void EwiseOP(const scalar_t *a, scalar_t *out, size_t size,
+                        scalarfn op) {
     size_t gid = threadIdx.x + blockIdx.x * blockDim.x;
-    out[gid] = (*op)(a[gid]);
+    if (gid < size) {
+
+        out[gid] = (*op)(a[gid]);
+    }
 }
 
 __global__ void EwiseOP(const scalar_t *a, const scalar_t *b, scalar_t *out,
-                        ewisefn op) {
+                        size_t size, ewisefn op) {
     size_t gid = threadIdx.x + blockIdx.x * blockDim.x;
-    out[gid] = (*op)(a[gid], b[gid]);
+    if (gid < size) {
+        out[gid] = (*op)(a[gid], b[gid]);
+    }
 }
 
 __global__ void ScalarOp(const scalar_t *a, scalar_t val, scalar_t *out,
-                         ewisefn op) {
+                         size_t size, ewisefn op) {
     size_t gid = threadIdx.x + blockIdx.x * blockDim.x;
-    out[gid] = (*op)(a[gid], val);
+    if (gid < size) {
+
+        out[gid] = (*op)(a[gid], val);
+    }
 }
 
 void EwiseMul(const CudaArray &a, const CudaArray &b, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn mul;
     cudaMemcpyFromSymbol(&mul, d_mul, sizeof(ewisefn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, mul);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, mul);
 }
 
 void ScalarMul(const CudaArray &a, scalar_t val, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn mul;
     cudaMemcpyFromSymbol(&mul, d_mul, sizeof(ewisefn));
-    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, mul);
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, mul);
 }
 void EwiseDiv(const CudaArray &a, const CudaArray &b, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn div;
     cudaMemcpyFromSymbol(&div, d_div, sizeof(ewisefn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, div);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, div);
 }
 void ScalarDiv(const CudaArray &a, scalar_t val, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn div;
     cudaMemcpyFromSymbol(&div, d_div, sizeof(ewisefn));
-    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, div);
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, div);
 }
 
 void ScalarPower(const CudaArray &a, scalar_t val, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn pow;
     cudaMemcpyFromSymbol(&pow, d_pow, sizeof(ewisefn));
-    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, pow);
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, pow);
 }
 
 void EwiseMaximum(const CudaArray &a, const CudaArray &b, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn maximum;
     cudaMemcpyFromSymbol(&maximum, d_max, sizeof(ewisefn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, maximum);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size,
+                                     maximum);
 }
 
 void ScalarMaximum(const CudaArray &a, scalar_t val, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn maximum;
     cudaMemcpyFromSymbol(&maximum, d_max, sizeof(ewisefn));
-    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, maximum);
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, maximum);
 }
 
 void EwiseEq(const CudaArray &a, const CudaArray &b, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn eq;
     cudaMemcpyFromSymbol(&eq, d_eq, sizeof(ewisefn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, eq);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, eq);
 }
 void ScalarEq(const CudaArray &a, scalar_t val, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn eq;
     cudaMemcpyFromSymbol(&eq, d_eq, sizeof(ewisefn));
-    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, eq);
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, eq);
 }
 
 void EwiseGe(const CudaArray &a, const CudaArray &b, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn ge;
     cudaMemcpyFromSymbol(&ge, d_ge, sizeof(ewisefn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, ge);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, ge);
 }
 void ScalarGe(const CudaArray &a, scalar_t val, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     ewisefn ge;
     cudaMemcpyFromSymbol(&ge, d_ge, sizeof(ewisefn));
-    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, ge);
+    ScalarOp<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, ge);
 }
 
 void EwiseLog(const CudaArray &a, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     scalarfn log;
     cudaMemcpyFromSymbol(&log, d_log, sizeof(scalarfn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, log);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, log);
 }
 void EwiseExp(const CudaArray &a, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     scalarfn exp;
     cudaMemcpyFromSymbol(&exp, d_exp, sizeof(scalarfn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, exp);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, exp);
 }
 void EwiseTanh(const CudaArray &a, CudaArray *out) {
     auto dim = CudaOneDim(out->size);
     scalarfn tanh;
     cudaMemcpyFromSymbol(&tanh, d_tanh, sizeof(scalarfn));
-    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, tanh);
+    EwiseOP<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, tanh);
 }
 
 /// END YOUR SOLUTION
